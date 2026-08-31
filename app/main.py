@@ -1,0 +1,181 @@
+import logging
+from typing import Any, Dict
+
+import httpx
+from fastapi import FastAPI, Header, Request
+from fastapi.responses import JSONResponse
+
+from app import domain, prompts, reasoning, settings, store
+from app.server_client import ServerClient, ServerError, forwardable
+
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)-5s [%(name)s] %(message)s",
+)
+log = logging.getLogger("irns-agent")
+
+app = FastAPI(title="irns agent", docs_url=None, redoc_url=None)
+
+_http: httpx.AsyncClient = None  # type: ignore[assignment]
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    global _http
+    prompts.load()
+    _http = httpx.AsyncClient(timeout=httpx.Timeout(settings.SERVER_TIMEOUT_SECONDS))
+    log.info("irns agent ready. Server at %s, prompts %s (each tenant auto-ingests on first use - "
+              "see /riskevent, /incomingevent, /init)", settings.SERVER_BASE_URL, prompts.fingerprint())
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    if _http:
+        await _http.aclose()
+
+
+@app.get("/health")
+async def health() -> Dict[str, object]:
+    return {"status": "UP", "prompts": prompts.fingerprint()}
+
+
+@app.get("/buildinfo")
+async def buildinfo() -> Dict[str, object]:
+    return {"group": settings.GROUP_NAME, "product": settings.PRODUCT_NAME, "brand": settings.BRAND_NAME}
+
+
+def _entry_json(entry: store.Entry) -> Dict[str, Any]:
+    return {
+        "ingested": entry.ingested,
+        "chunkCount": len(entry.chunks),
+        "actionTypeCount": len(entry.masters.get("ACTION_TYPE", {})),
+        "actionStatusCount": len(entry.masters.get("ACTION_STATUS", {})),
+        "statusCount": len(entry.masters.get("STATUS", {})),
+        "ingestedAt": entry.ingested_at.isoformat() if entry.ingested_at else None,
+        "error": entry.error,
+    }
+
+
+@app.get("/status")
+async def status(x_tenant_id: str = Header(default="")) -> Dict[str, Any]:
+    """Peeks at whatever is already cached for this tenant - never triggers
+    ingestion itself. Powers the UI's status indicator (see
+    IrnsAgentStatusController.status() on the Java side)."""
+    entry = store.status(x_tenant_id)
+    if entry is None:
+        return {"ingested": False, "chunkCount": 0, "ingestedAt": None, "error": None}
+    return _entry_json(entry)
+
+
+@app.post("/init")
+async def init(request: Request, x_tenant_id: str = Header(default="")) -> JSONResponse:
+    """Forces a fresh ingest of this tenant's "IRNS" knowledge domain and
+    master lookup tables - the "re-init if the document has changed" button
+    on the Java side. Uses this request's own forwarded session, same as
+    every other call into this agent - no separate auth for this."""
+    headers = forwardable(request.headers)
+    if not _has_credential(headers):
+        return _problem(401, "No session")
+
+    client = ServerClient(_http, headers)
+    entry = await store.reload(client, x_tenant_id)
+    return JSONResponse(status_code=200, content=_entry_json(entry))
+
+
+@app.post("/riskevent")
+async def risk_event_created(request: Request, x_tenant_id: str = Header(default="")) -> JSONResponse:
+    """Called by smartgateway's RiskEventController right after a risk event
+    is created (fire-and-forget - the browser's create request has already
+    returned by the time this runs). Auto-ingests this tenant's IRNS domain
+    on first use, decides the next action via one LLM call, creates it, and
+    updates the risk event's status if the decision calls for it."""
+    headers = forwardable(request.headers)
+    if not _has_credential(headers):
+        return _problem(401, "No session")
+
+    body = await _body(request)
+    risk_event = body.get("riskEvent")
+    if not isinstance(risk_event, dict) or not risk_event.get("id"):
+        return _problem(400, "riskEvent is required")
+
+    client = ServerClient(_http, headers)
+    entry = await store.ensure_loaded(client, x_tenant_id)
+    if not entry.ingested:
+        return JSONResponse(status_code=200, content={"skipped": entry.error or "IRNS domain not ingested yet"})
+
+    try:
+        decision = await reasoning.decide_risk_event(client, entry, risk_event)
+        result = await _act_on_decision(client, entry, risk_event, decision)
+    except ServerError as exc:
+        log.warning("riskevent decision for %s failed: %s", risk_event.get("id"), exc)
+        return _problem(502, f"Could not reach the server: {exc}")
+
+    return JSONResponse(status_code=200, content=result)
+
+
+@app.post("/incomingevent")
+async def incoming_event_created(request: Request, x_tenant_id: str = Header(default="")) -> JSONResponse:
+    """Same as /riskevent, but for an incoming event recorded against an
+    existing risk event - the parent risk event is included in the request
+    body by the Java caller, so this agent needs no extra callback just to
+    fetch it."""
+    headers = forwardable(request.headers)
+    if not _has_credential(headers):
+        return _problem(401, "No session")
+
+    body = await _body(request)
+    risk_event = body.get("riskEvent")
+    incoming_event = body.get("incomingEvent")
+    if not isinstance(risk_event, dict) or not isinstance(incoming_event, dict):
+        return _problem(400, "riskEvent and incomingEvent are required")
+
+    client = ServerClient(_http, headers)
+    entry = await store.ensure_loaded(client, x_tenant_id)
+    if not entry.ingested:
+        return JSONResponse(status_code=200, content={"skipped": entry.error or "IRNS domain not ingested yet"})
+
+    try:
+        decision = await reasoning.decide_incoming_event(client, entry, risk_event, incoming_event)
+        result = await _act_on_decision(client, entry, risk_event, decision)
+    except ServerError as exc:
+        log.warning("incomingevent decision for risk event %s failed: %s", risk_event.get("id"), exc)
+        return _problem(502, f"Could not reach the server: {exc}")
+
+    return JSONResponse(status_code=200, content=result)
+
+
+async def _act_on_decision(client: ServerClient, entry: store.Entry, risk_event: Dict[str, Any],
+                            decision: Dict[str, Any]) -> Dict[str, Any]:
+    if not decision:
+        return {"skipped": "The model did not return a usable decision"}
+
+    action_payload = reasoning.build_action_event_payload(entry, risk_event["id"], decision)
+    created = await client.create_action_event(action_payload) if action_payload else None
+
+    new_status_id = reasoning.resolve_new_status_id(entry, decision)
+    updated_risk_event = None
+    if new_status_id and new_status_id != risk_event.get("statusId"):
+        # Java's update is a full replace, not a patch - send the whole risk
+        # event back with just statusId changed, never a partial object.
+        updated = dict(risk_event)
+        updated["statusId"] = new_status_id
+        updated_risk_event = await client.update_risk_event(updated)
+
+    return {"decision": decision, "actionEvent": created, "riskEvent": updated_risk_event}
+
+
+async def _body(request: Request) -> Dict[str, Any]:
+    try:
+        body = await request.json()
+    except Exception:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def _has_credential(headers: Dict[str, str]) -> bool:
+    lowered = {k.lower() for k in headers}
+    return "cookie" in lowered or "x-session-id" in lowered
+
+
+def _problem(status_code: int, message: str) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"message": message})

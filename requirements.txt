@@ -1,0 +1,27 @@
+# Web layer - same choice as chat_agent/ivr_agent.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Callback to the Java server (knowledge-domain lookup, file download,
+# tenant-configured prompt overrides, LLM call, master lookups, and
+# creating the action event / updating the risk event this agent decides
+# on). This agent never talks to Postgres or OpenSearch directly - every
+# read and write goes back through smartgateway's own REST controllers,
+# same as chat_agent/ivr_agent's own callbacks.
+httpx==0.28.1
+
+# "Simple langchain" per spec - just PromptTemplate-style rendering of the
+# context template with the ingested document chunks substituted in. No
+# langgraph here: unlike chat_agent/ivr_agent this is a single-shot
+# decide-and-act per event, not a multi-turn conversation, so there is no
+# pause/resume state to checkpoint and no graph to build.
+langchain-core==0.3.29
+
+# Parses the IRNS knowledge domain's file(s) - prose documents (the SRS),
+# not the tabular sheet ivr_agent's own domain file is. .docx via
+# python-docx (same technique used to read the SRS during planning);
+# .txt/.md are read as plain text, no extra dependency needed.
+python-docx==1.1.2
+
+# Local prompt-default fallback (config/prompts.yaml), same as chat_agent/ivr_agent.
+PyYAML==6.0.2
