@@ -32,6 +32,15 @@ LLM_CALL_PATH = _env("LLM_CALL_PATH", "/agent/llm-call")
 ACTION_EVENT_CREATE_PATH = _env("ACTION_EVENT_CREATE_PATH", "/tenant/irns/action-event")
 RISK_EVENT_UPDATE_PATH = _env("RISK_EVENT_UPDATE_PATH", "/tenant/irns/risk-event")
 
+# Read-only lookups the /actionevent lane uses to reassemble a risk event's
+# full history from just the id it's given - the same GET endpoints the UI
+# itself calls, never a direct DB read.
+RISK_EVENT_GET_PATH_TEMPLATE = _env("RISK_EVENT_GET_PATH_TEMPLATE", "/tenant/irns/risk-event/{id}")
+ACTION_EVENT_LIST_PATH_TEMPLATE = _env(
+    "ACTION_EVENT_LIST_PATH_TEMPLATE", "/tenant/irns/action-event/by-risk-event/{riskEventId}")
+INCOMING_EVENT_LIST_PATH_TEMPLATE = _env(
+    "INCOMING_EVENT_LIST_PATH_TEMPLATE", "/tenant/irns/incoming-event/by-risk-event/{riskEventId}")
+
 # {type} is one of IrnsMasterType's names: ACTION_TYPE, ACTION_STATUS, STATUS
 # (the only 3 this agent needs - see app/domain.py's load_masters()).
 MASTER_ALL_PATH_TEMPLATE = _env("MASTER_ALL_PATH_TEMPLATE", "/tenant/irns/master/{type}/all")

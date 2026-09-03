@@ -49,6 +49,14 @@ def status(tenant_key: str) -> Optional[Entry]:
     return _cache.get(tenant_key)
 
 
+def reset(tenant_key: str) -> None:
+    """Evicts this tenant's cached entry - called on POST /resetContext, so
+    the next ensure_loaded() for this tenant re-ingests from scratch instead
+    of serving stale chunks/masters. Safe to call even if nothing is
+    cached."""
+    _cache.pop(tenant_key, None)
+
+
 async def _load(client: ServerClient, tenant_key: str) -> Entry:
     try:
         result = await ingest(client)

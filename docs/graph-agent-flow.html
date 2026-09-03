@@ -1,0 +1,438 @@
+<meta charset="utf-8">
+<title>Graph Agent Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --surface: #fffdf8;
+    --surface-2: #eeebe1;
+    --ink: #221f1a;
+    --muted: #756e5f;
+    --line: #c9c2b0;
+    --accent: #b5601c;
+    --accent-ink: #7a3f10;
+    --accent-soft: rgba(181, 96, 28, 0.10);
+    --proposal: #6e5a9c;
+    --proposal-soft: rgba(110, 90, 156, 0.12);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #18160f;
+      --surface: #211e17;
+      --surface-2: #2a261c;
+      --ink: #ede7d8;
+      --muted: #a79d87;
+      --line: #4a4433;
+      --accent: #e2932f;
+      --accent-ink: #f4b563;
+      --accent-soft: rgba(226, 147, 47, 0.14);
+      --proposal: #b7a4e6;
+      --proposal-soft: rgba(183, 164, 230, 0.16);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #18160f;
+    --surface: #211e17;
+    --surface-2: #2a261c;
+    --ink: #ede7d8;
+    --muted: #a79d87;
+    --line: #4a4433;
+    --accent: #e2932f;
+    --accent-ink: #f4b563;
+    --accent-soft: rgba(226, 147, 47, 0.14);
+    --proposal: #b7a4e6;
+    --proposal-soft: rgba(183, 164, 230, 0.16);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.5;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 32px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 680px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .proposal-tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--proposal);
+    background: var(--proposal-soft);
+    border: 1px solid var(--proposal);
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(26px, 3.2vw, 34px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .subhead {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15.5px;
+    max-width: 66ch;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .swatch {
+    width: 28px;
+    height: 0;
+    border-top: 2px solid var(--ink);
+    flex-shrink: 0;
+  }
+  .swatch.dashed {
+    border-top: 2px dashed var(--accent);
+  }
+  .swatch.term {
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid var(--muted);
+    border-radius: 50%;
+  }
+
+  figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 8px 8px 4px;
+  }
+
+  .diagram-scroll {
+    overflow-x: auto;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 940px;
+  }
+
+  figcaption {
+    padding: 14px 18px 18px;
+    font-size: 13.5px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    margin-top: 8px;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  .node-box { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
+  .node-box.decision { stroke: var(--accent); stroke-width: 2; }
+  .node-box.entry { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 3; }
+  .node-label { fill: var(--ink); font-family: "IBM Plex Mono", monospace; font-size: 14.5px; font-weight: 600; text-anchor: middle; }
+  .node-sub { fill: var(--muted); font-family: "IBM Plex Sans", sans-serif; font-size: 10px; text-anchor: middle; }
+  .edge { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+  .edge.cond { stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 6 4; }
+  .edge-label { fill: var(--accent-ink); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+  .edge-label.plain { fill: var(--muted); }
+  .routing-tag { fill: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 10px; font-style: italic; }
+  .term { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  .term-label { fill: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 9.5px; text-anchor: middle; letter-spacing: 0.04em; }
+  .source-label { fill: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 11px; text-anchor: start; }
+
+  section.nodes { display: flex; flex-direction: column; gap: 16px; }
+  h2 {
+    margin: 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .node-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .node-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .node-card .name {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .node-card.decision .name { color: var(--accent-ink); }
+  .node-card p {
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .node-card .ref {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0.8;
+  }
+
+  .note {
+    max-width: 76ch;
+    font-size: 14.5px;
+    color: var(--muted);
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.92em;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  footer {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: "IBM Plex Mono", monospace;
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">app/graph.py <span class="proposal-tag">implemented</span></div>
+    <h1>How a decision moves through irns-agent</h1>
+    <p class="subhead">
+      Three fire-and-forget triggers — a new risk event, a new incoming event, or a previous
+      action's review time coming due — all funnel into one shared decision, which ends in
+      exactly one of two outcomes: record the next action, or close the risk event. No node
+      here ever pauses; every run finishes in a single pass.
+    </p>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch"></span> fixed edge — always taken</div>
+    <div class="legend-item"><span class="swatch dashed"></span> conditional edge — code decides</div>
+    <div class="legend-item"><span class="swatch term"></span> trigger / terminal</div>
+  </div>
+
+  <figure>
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 1300 460" role="img" aria-label="Flow diagram of the IRNS agent graph: three triggers (riskevent, incomingevent, actionevent) each run load_domain then their own gather node, all converging on a shared decide node, which routes via _after_decide to record_action or close_risk_event, both ending at END.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+
+        <!-- trigger terminals -->
+        <circle cx="45" cy="70" r="18" class="term"></circle>
+        <text x="45" y="74" class="term-label">POST</text>
+        <text x="72" y="66" class="source-label">/riskevent</text>
+        <text x="72" y="80" class="node-sub" text-anchor="start">RiskEventController.create()</text>
+
+        <circle cx="45" cy="215" r="18" class="term"></circle>
+        <text x="45" y="219" class="term-label">POST</text>
+        <text x="72" y="211" class="source-label">/incomingevent</text>
+        <text x="72" y="225" class="node-sub" text-anchor="start">IncomingEventController.create()</text>
+
+        <circle cx="45" cy="360" r="18" class="term"></circle>
+        <text x="45" y="364" class="term-label">POST</text>
+        <text x="72" y="356" class="source-label">/actionevent</text>
+        <text x="72" y="370" class="node-sub" text-anchor="start">caller/scheduler not yet built</text>
+
+        <!-- terminals -> load_domain -->
+        <path class="edge" d="M63,70 C110,70 110,140 195,150" marker-end="url(#arrow)" style="color:var(--ink)"></path>
+        <line class="edge" x1="63" y1="215" x2="195" y2="187" marker-end="url(#arrow)" style="color:var(--ink)"></line>
+        <path class="edge" d="M63,360 C110,360 110,230 195,222" marker-end="url(#arrow)" style="color:var(--ink)"></path>
+
+        <!-- load_domain node -->
+        <rect x="195" y="160" width="150" height="56" rx="10" class="node-box"></rect>
+        <text x="270" y="184" class="node-label">load_domain</text>
+        <text x="270" y="201" class="node-sub">ensure IRNS ingested</text>
+        <text x="270" y="150" class="routing-tag" text-anchor="middle">routes via _after_load_domain</text>
+
+        <!-- load_domain -> 3 gather nodes (conditional: which lane) -->
+        <path class="edge cond" d="M320,160 C350,120 380,90 430,80" marker-end="url(#arrow)" style="color:var(--accent)"></path>
+        <line class="edge cond" x1="345" y1="188" x2="430" y2="188" marker-end="url(#arrow)" style="color:var(--accent)"></line>
+        <path class="edge cond" d="M320,216 C350,260 380,300 430,310" marker-end="url(#arrow)" style="color:var(--accent)"></path>
+
+        <!-- gather nodes -->
+        <rect x="430" y="52" width="170" height="56" rx="10" class="node-box"></rect>
+        <text x="515" y="76" class="node-label">gather_risk_event</text>
+        <text x="515" y="93" class="node-sub">risk event from the POST body</text>
+
+        <rect x="430" y="160" width="170" height="56" rx="10" class="node-box"></rect>
+        <text x="515" y="184" class="node-label">gather_incoming_event</text>
+        <text x="515" y="201" class="node-sub">+ incoming event, both in the body</text>
+
+        <rect x="430" y="282" width="170" height="56" rx="10" class="node-box"></rect>
+        <text x="515" y="306" class="node-label">gather_action_event</text>
+        <text x="515" y="323" class="node-sub">fetches full history via GET</text>
+        <text x="515" y="272" class="routing-tag" text-anchor="middle">only lane that round-trips first</text>
+
+        <!-- gather -> decide (fixed edges) -->
+        <path class="edge" d="M600,80 C660,80 680,140 745,175" marker-end="url(#arrow)" style="color:var(--ink)"></path>
+        <line class="edge" x1="600" y1="188" x2="745" y2="196" marker-end="url(#arrow)" style="color:var(--ink)"></line>
+        <path class="edge" d="M600,310 C660,310 680,250 745,216" marker-end="url(#arrow)" style="color:var(--ink)"></path>
+
+        <!-- decide node -->
+        <rect x="745" y="168" width="150" height="56" rx="10" class="node-box decision"></rect>
+        <text x="820" y="192" class="node-label">decide</text>
+        <text x="820" y="209" class="node-sub">one shared LLM call</text>
+        <text x="820" y="158" class="routing-tag" text-anchor="middle">routes via _after_decide</text>
+
+        <!-- decide -> record_action / close_risk_event (conditional) -->
+        <path class="edge cond" d="M895,178 C950,150 980,120 1020,100" marker-end="url(#arrow)" style="color:var(--accent)"></path>
+        <text x="905" y="140" class="edge-label" text-anchor="start">actionType or</text>
+        <text x="905" y="153" class="edge-label" text-anchor="start">reviewAt set</text>
+
+        <path class="edge cond" d="M895,214 C950,250 980,290 1020,318" marker-end="url(#arrow)" style="color:var(--accent)"></path>
+        <text x="905" y="270" class="edge-label" text-anchor="start">both absent</text>
+
+        <!-- record_action / close_risk_event nodes -->
+        <rect x="1020" y="70" width="160" height="56" rx="10" class="node-box"></rect>
+        <text x="1100" y="94" class="node-label">record_action</text>
+        <text x="1100" y="111" class="node-sub">insert action_event, PENDING</text>
+
+        <rect x="1020" y="290" width="160" height="56" rx="10" class="node-box"></rect>
+        <text x="1100" y="314" class="node-label">close_risk_event</text>
+        <text x="1100" y="331" class="node-sub">terminal status, clear review_at</text>
+
+        <!-- -> END -->
+        <path class="edge" d="M1180,98 C1230,98 1230,190 1260,196" marker-end="url(#arrow)" style="color:var(--ink)"></path>
+        <path class="edge" d="M1180,318 C1230,318 1230,220 1260,214" marker-end="url(#arrow)" style="color:var(--ink)"></path>
+        <circle cx="1280" cy="205" r="20" class="term"></circle>
+        <text x="1280" y="209" class="term-label">END</text>
+      </svg>
+    </div>
+    <figcaption>
+      Solid lines are fixed steps; dashed amber lines are decisions made in code
+      (<b>_after_load_domain</b>, <b>_after_decide</b>, and the lane routing right after
+      <b>load_domain</b>). All three triggers share the exact same <b>decide</b> node and the
+      exact same two-way outcome — the only real difference between the three lanes is how much
+      work <b>gather_*</b> has to do to assemble that decision's context.
+    </figcaption>
+  </figure>
+
+  <section class="nodes">
+    <h2>Nodes</h2>
+    <div class="node-grid">
+      <div class="node-card">
+        <span class="name">load_domain</span>
+        <p>Lazily ingests the tenant's IRNS knowledge domain + the 3 master lookup tables it needs. Runs first, every lane.</p>
+        <span class="ref">store.ensure_loaded · app/graph.py</span>
+      </div>
+      <div class="node-card">
+        <span class="name">gather_risk_event</span>
+        <p>The new risk event is already in the <code>/riskevent</code> POST body — no extra fetch, this node is a pass-through.</p>
+        <span class="ref">app/graph.py · app/main.py's /riskevent</span>
+      </div>
+      <div class="node-card">
+        <span class="name">gather_incoming_event</span>
+        <p>The incoming event plus its parent risk event are already in the <code>/incomingevent</code> POST body — pass-through.</p>
+        <span class="ref">app/graph.py · app/main.py's /incomingevent</span>
+      </div>
+      <div class="node-card">
+        <span class="name">gather_action_event</span>
+        <p><code>/actionevent</code> only carries a risk event id — this node fetches the risk event, every action_event, and every incoming_event for it via the existing GET endpoints before deciding.</p>
+        <span class="ref">app/server_client.py: get_risk_event/get_action_events/get_incoming_events</span>
+      </div>
+      <div class="node-card decision">
+        <span class="name">decide</span>
+        <p>One LLM call, one prompt schema, regardless of lane: given the reference material and whatever context was gathered, return <code>{actionType, actionCode, channel, comments, newStatusCode, reviewAt}</code>.</p>
+        <span class="ref">reasoning.decide()</span>
+      </div>
+      <div class="node-card">
+        <span class="name">record_action</span>
+        <p>Always an <b>insert</b>, never a mutation of the prior action — even a "nothing to do yet, check back at reviewAt" outcome is its own row with <code>actionType = NULL</code>. Status is always <code>PENDING</code>; most rows stay that way permanently, and that's fine. Also stamps the risk event's <code>review_at</code>.</p>
+        <span class="ref">POST /tenant/irns/action-event, + reviewAt field</span>
+      </div>
+      <div class="node-card">
+        <span class="name">close_risk_event</span>
+        <p>Reached only when the decision has neither an action nor a future review point. Sets the terminal status and clears <code>review_at</code> so the risk event drops out of the poll entirely.</p>
+        <span class="ref">PUT /tenant/irns/risk-event</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="note">
+    <b>Any step can end the run early.</b> <code>_after_load_domain</code> routes straight to
+    <code>END</code> if the domain isn't ingested; <code>_after_decide</code> does the same if
+    the LLM call fails or its reply doesn't parse — same <code>END</code> the happy path uses,
+    same as chat_agent/ivr_agent's own graphs. Nothing here needs a separate error terminal.
+  </div>
+
+  <div class="note">
+    <b>No pause, no polling loop inside the agent.</b> Unlike ivr_agent's <code>clarify</code>
+    node, nothing in this graph ever calls <code>interrupt()</code> — every run is triggered
+    fire-and-forget and runs to completion in one pass. In particular, <b>the agent itself never
+    scans for due reviews</b> — it only ever answers <code>/actionevent</code> when something
+    else calls it with a risk event id. What that something is — a periodic job, a scheduler,
+    whatever ends up calling this endpoint once <code>review_at</code> comes due — is a separate,
+    not-yet-built piece outside this graph.
+  </div>
+
+  <div class="note">
+    <b>Closing is inferred, not a separate field.</b> The decision schema has no explicit "can
+    this close?" boolean — <code>_after_decide</code> reads it off what's present:
+    <code>actionType</code> or <code>reviewAt</code> set → <code>record_action</code>; both
+    absent → <code>close_risk_event</code>. One schema answers all three of the original
+    questions (next action + its review time / can it close, else when to recheck / close if
+    neither) by what the model chooses to fill in.
+  </div>
+
+  <footer>generated from app/graph.py · builder.compile() — styled after chat_agent's own docs/graph-agent-flow.html</footer>
+</div>

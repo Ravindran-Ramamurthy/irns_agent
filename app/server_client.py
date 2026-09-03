@@ -106,6 +106,23 @@ class ServerClient:
         body = _json_or_raise(response, f"list master {master_type}")
         return body if isinstance(body, list) else []
 
+    async def get_risk_event(self, risk_event_id: str) -> Dict[str, Any]:
+        url = settings.SERVER_BASE_URL + settings.RISK_EVENT_GET_PATH_TEMPLATE.format(id=risk_event_id)
+        response = await self._get(url, {})
+        return _json_or_raise(response, "get risk event")
+
+    async def get_action_events(self, risk_event_id: str) -> List[Dict[str, Any]]:
+        url = settings.SERVER_BASE_URL + settings.ACTION_EVENT_LIST_PATH_TEMPLATE.format(riskEventId=risk_event_id)
+        response = await self._get(url, {})
+        body = _json_or_raise(response, "list action events")
+        return body if isinstance(body, list) else []
+
+    async def get_incoming_events(self, risk_event_id: str) -> List[Dict[str, Any]]:
+        url = settings.SERVER_BASE_URL + settings.INCOMING_EVENT_LIST_PATH_TEMPLATE.format(riskEventId=risk_event_id)
+        response = await self._get(url, {})
+        body = _json_or_raise(response, "list incoming events")
+        return body if isinstance(body, list) else []
+
     async def create_action_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = settings.SERVER_BASE_URL + settings.ACTION_EVENT_CREATE_PATH
         response = await self._post(url, payload, accept="application/json")

@@ -10,12 +10,15 @@ uvicorn[standard]==0.34.0
 # same as chat_agent/ivr_agent's own callbacks.
 httpx==0.28.1
 
-# "Simple langchain" per spec - just PromptTemplate-style rendering of the
-# context template with the ingested document chunks substituted in. No
-# langgraph here: unlike chat_agent/ivr_agent this is a single-shot
-# decide-and-act per event, not a multi-turn conversation, so there is no
-# pause/resume state to checkpoint and no graph to build.
+# Orchestration. This agent now has 3 fire-and-forget entry points
+# (riskevent/incomingevent/actionevent) that share most of their steps
+# (load_domain -> gather_* -> decide -> record_action|close_risk_event), so
+# it's expressed as a LangGraph the same way chat_agent/ivr_agent are - see
+# app/graph.py. Unlike those two, no node here ever calls interrupt(): every
+# run is single-shot end-to-end, so there's no pause/resume state to
+# checkpoint and build() compiles with no checkpointer at all.
 langchain-core==0.3.29
+langgraph==0.2.62
 
 # Parses the IRNS knowledge domain's file(s) - prose documents (the SRS),
 # not the tabular sheet ivr_agent's own domain file is. .docx via

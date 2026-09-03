@@ -23,6 +23,8 @@ _OVERRIDE_KEY_NAMES = {
     "risk_event_context": "RISK_EVENT_CONTEXT",
     "incoming_event_system": "INCOMING_EVENT_SYSTEM",
     "incoming_event_context": "INCOMING_EVENT_CONTEXT",
+    "action_event_system": "ACTION_EVENT_SYSTEM",
+    "action_event_context": "ACTION_EVENT_CONTEXT",
 }
 
 
