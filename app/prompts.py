@@ -1,23 +1,17 @@
-import hashlib
-import logging
 import re
 from typing import Any, Dict, Optional
-
-import yaml
-
-from app import settings
-
-log = logging.getLogger(__name__)
-
-_prompts: Dict[str, Any] = {}
-_fingerprint: str = "unloaded"
 
 # This module's own lowercase keys -> the server's PromptKey enum name used
 # to look up a tenant override (see server_client.get_prompts()). Kept in
 # sync with PromptScopeRegistry's "irns-agent"|"Shared" block and
-# AgentSupportController.AGENT_PROMPT_KEYS on the Java side - a key simply
-# not being here is what would keep it local-only, though every key this
-# agent has is tenant-overridable.
+# AgentSupportController.AGENT_PROMPT_KEYS on the Java side.
+#
+# There is no local fallback here (no packaged prompts.yaml, no hardcoded
+# constant) - Java is the sole source of default prompt text
+# (PromptScopeRegistry's hardcoded defaults, consulted when a prompt's first
+# version is created). If a key isn't resolvable server-side yet, get()
+# raises - callers surface that as a run-skipping error rather than silently
+# substituting local text.
 _OVERRIDE_KEY_NAMES = {
     "risk_event_system": "RISK_EVENT_SYSTEM",
     "risk_event_context": "RISK_EVENT_CONTEXT",
@@ -28,44 +22,14 @@ _OVERRIDE_KEY_NAMES = {
 }
 
 
-def load() -> None:
-    global _prompts, _fingerprint
-
-    path = settings.PROMPTS_PATH
-    if not path.exists():
-        log.warning("No prompt file at %s - falling back to the packaged defaults at %s",
-                    path, settings.PROMPTS_FALLBACK_PATH)
-        path = settings.PROMPTS_FALLBACK_PATH
-
-    raw = path.read_bytes()
-    _prompts = yaml.safe_load(raw) or {}
-    _fingerprint = hashlib.sha256(raw).hexdigest()[:12]
-
-    log.info("Loaded prompts from %s (fingerprint %s)", path, _fingerprint)
-
-
-def fingerprint() -> str:
-    return _fingerprint
-
-
 def get(key: str, overrides: Optional[Dict[str, str]] = None) -> str:
-    if overrides:
-        override_key = _OVERRIDE_KEY_NAMES.get(key)
-        if override_key and overrides.get(override_key):
-            return str(overrides[override_key])
-
-    shared = _prompts.get("shared") or {}
-    if key in shared:
-        return str(shared[key])
-
-    raise KeyError(f"No prompt '{key}' in {settings.PROMPTS_PATH}")
-
-
-def get_or(key: str, default: str, overrides: Optional[Dict[str, str]] = None) -> str:
-    try:
-        return get(key, overrides)
-    except KeyError:
-        return default
+    override_key = _OVERRIDE_KEY_NAMES[key]
+    value = (overrides or {}).get(override_key)
+    if not value:
+        raise KeyError(
+            f"No '{override_key}' prompt is configured for irns-agent yet - "
+            f"set one via the IRNS Prompts page")
+    return str(value)
 
 
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")

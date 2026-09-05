@@ -56,8 +56,11 @@ class ServerClient:
         self._headers = {**headers, "Accept": "application/json"}
 
     async def get_prompts(self, sub_agent: str) -> Dict[str, str]:
-        """Tenant-configured prompt overrides. Never raises: any failure just
-        means no overrides, falling back to the local prompts.yaml."""
+        """Effective prompt text, resolved server-side through the full
+        fallback chain: a live DB template, else the tenant's own property,
+        else PromptScopeRegistry's hardcoded default. Never raises: any
+        failure just means no result for this call; there is no local
+        fallback on this side any more."""
         url = settings.SERVER_BASE_URL + settings.AGENT_PROMPTS_PATH
         params = {"agent": settings.AGENT_ID, "subAgent": sub_agent}
         try:
@@ -74,37 +77,54 @@ class ServerClient:
             return {}
         return body if isinstance(body, dict) else {}
 
-    async def list_domains(self) -> List[Dict[str, Any]]:
-        """All (non-deleted) knowledge domains visible to this tenant."""
-        url = settings.SERVER_BASE_URL + settings.DOMAIN_LIST_PATH
-        params = {"page": 0, "size": 200, "sortBy": "name", "sortDir": "asc", "deleted": "false"}
-        response = await self._get(url, params)
-        body = _json_or_raise(response, "list domains")
-        return body if isinstance(body, list) else []
-
-    async def list_domain_files(self, domain_id: str) -> List[Dict[str, Any]]:
-        url = f"{settings.SERVER_BASE_URL}{settings.DOMAIN_FILES_PATH}/{domain_id}"
-        response = await self._get(url, {})
-        body = _json_or_raise(response, "list domain files")
-        return body if isinstance(body, list) else []
-
-    async def download_file(self, file_id: str) -> bytes:
-        url = f"{settings.SERVER_BASE_URL}{settings.DOMAIN_FILE_DOWNLOAD_PATH}/{file_id}"
-        response = await self._get(url, {})
-        if response.status_code == 401:
-            raise ServerError("session expired")
-        if response.status_code >= 400:
-            raise ServerError(f"download file: HTTP {response.status_code}")
-        return response.content
-
     async def get_master_all(self, master_type: str) -> List[Dict[str, Any]]:
-        """All active rows of one IRNS lookup table (ACTION_TYPE, ACTION_STATUS
-        or STATUS) - used to map the LLM's human-readable codes back to the FK
-        ids ActionEvent/RiskEvent actually need."""
+        """All active rows of one IRNS lookup table (ALERT_CODE, ACTION_TYPE,
+        ACTION_STATUS or STATUS) - used to map the LLM's human-readable codes
+        back to the FK ids ActionEvent/RiskEvent actually need."""
         url = settings.SERVER_BASE_URL + settings.MASTER_ALL_PATH_TEMPLATE.format(type=master_type)
         response = await self._get(url, {})
         body = _json_or_raise(response, f"list master {master_type}")
         return body if isinstance(body, list) else []
+
+    async def get_master_by_id(self, master_type: str, master_id: str) -> Optional[Dict[str, Any]]:
+        """One row of an IRNS lookup table by its own id - used for
+        ALERT_CODE/RESPONSE_CODE, where a risk/incoming event already carries
+        the exact FK id it needs and loading the whole table would be waste.
+        Returns None (rather than raising) on a 404, same "absent, not an
+        error" contract as get_prompt_template - an event referencing a
+        deleted/unknown row is handled by the caller's own fallback text, not
+        a hard failure."""
+        url = settings.SERVER_BASE_URL + settings.MASTER_BY_ID_PATH_TEMPLATE.format(type=master_type, id=master_id)
+        response = await self._get(url, {})
+        if response.status_code == 404:
+            return None
+        return _json_or_raise(response, f"get master {master_type}/{master_id}")
+
+    async def get_prompt_template(self, object_type: str, object_id: Optional[str], key: str) -> Optional[str]:
+        """The effective prompt text for one (agent=irns-agent, objectType,
+        objectId, key) - resolved server-side through the same fallback chain
+        as every other agent prompt: a live (non-deleted) PromptTemplate row,
+        else the tenant's own property, else PromptScopeRegistry's hardcoded
+        default (see AgentSupportController.prompt() / PromptTemplateService.
+        resolve() on the Java side). Returns None only if none of those three
+        exist - a genuinely unconfigured key with no hardcoded default either."""
+        url = settings.SERVER_BASE_URL + settings.AGENT_PROMPT_PATH
+        params = {"agent": settings.AGENT_ID, "objectType": object_type, "key": key}
+        if object_id:
+            params["objectId"] = object_id
+        try:
+            response = await self._http.get(url, headers=self._headers, params=params)
+        except httpx.HTTPError as exc:
+            log.warning("Could not fetch prompt %s/%s: %s", object_type, key, exc)
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            body = response.json()
+        except json.JSONDecodeError:
+            return None
+        value = body.get("value") if isinstance(body, dict) else None
+        return value if value else None
 
     async def get_risk_event(self, risk_event_id: str) -> Dict[str, Any]:
         url = settings.SERVER_BASE_URL + settings.RISK_EVENT_GET_PATH_TEMPLATE.format(id=risk_event_id)

@@ -3,7 +3,9 @@ from typing import Any, Dict
 
 from langgraph.graph import END, StateGraph
 
-from app import reasoning, store
+from app import decider as decider_module
+from app import domain, reasoning
+from app.domain import DomainError
 from app.server_client import ServerClient, ServerError
 from app.state import IrnsState
 
@@ -23,14 +25,17 @@ def _client(config: Dict[str, Any]) -> ServerClient:
 
 
 async def _load_domain(state: IrnsState, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Loads ACTION_TYPE/ACTION_STATUS/STATUS fresh for this one run - no
+    cache, no Re-init: see app/domain.py's ingest()."""
     try:
-        entry = await store.ensure_loaded(_client(config), state["tenant_key"])
+        entry = await domain.ingest(_client(config))
+    except DomainError as exc:
+        log.warning("IRNS agent: domain error for tenant %r: %s", state["tenant_key"], exc)
+        return {"error": str(exc)}
     except ServerError as exc:
         log.warning("IRNS agent: could not reach server to load the domain: %s", exc)
         return {"error": f"Could not reach the server to load the IRNS domain: {exc}"}
 
-    if not entry.ingested:
-        return {"error": entry.error or "IRNS domain not ingested yet"}
     return {"entry": entry}
 
 
@@ -47,9 +52,23 @@ async def _gather_risk_event(state: IrnsState, config: Dict[str, Any]) -> Dict[s
 
 
 async def _gather_incoming_event(state: IrnsState, config: Dict[str, Any]) -> Dict[str, Any]:
-    # Already in state - the /incomingevent POST body carries both the
-    # incoming event and its parent risk event.
-    return {}
+    """The incoming event and its parent risk event are already in state -
+    the /incomingevent POST body carries both. Still fetches the risk
+    event's action/incoming-event history, same GET calls
+    _gather_action_event uses, since decide_for_incoming_event needs it to
+    know current state (e.g. is IB currently blocked right now) - see
+    app/decider.py's LocalDecider."""
+    client = _client(config)
+    risk_event_id = state["risk_event"]["id"]
+
+    try:
+        action_events = await client.get_action_events(risk_event_id)
+        incoming_events = await client.get_incoming_events(risk_event_id)
+    except ServerError as exc:
+        log.warning("IRNS agent: could not load history for risk event %s: %s", risk_event_id, exc)
+        return {"error": f"Could not load risk event history: {exc}"}
+
+    return {"action_events": action_events, "incoming_events": incoming_events}
 
 
 async def _gather_action_event(state: IrnsState, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,18 +89,33 @@ async def _gather_action_event(state: IrnsState, config: Dict[str, Any]) -> Dict
 
 
 async def _decide(state: IrnsState, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Picks the Decider (LlmDecider|LocalDecider) per settings.DECIDER_MODE
+    and calls whichever of its 3 methods matches this run's lane - see
+    app/decider.py. Everything downstream (record_action/close_risk_event)
+    only ever sees the resulting Decision dict, identically either way."""
+    decider = decider_module.build_decider(_client(config), state["tenant_key"])
+    entry = state["entry"]
+    risk_event = state["risk_event"]
+    action_events = state.get("action_events") or []
+    incoming_events = state.get("incoming_events") or []
+    source = state["source"]
+
     try:
-        decision, usage = await reasoning.decide(
-            _client(config), state["source"], state["entry"], state["risk_event"],
-            incoming_event=state.get("incoming_event"),
-            action_events=state.get("action_events"),
-            incoming_events=state.get("incoming_events"))
+        if source == "riskevent":
+            decision, usage = await decider.decide_for_risk_event(entry, risk_event)
+        elif source == "incomingevent":
+            decision, usage = await decider.decide_for_incoming_event(
+                entry, risk_event, action_events, incoming_events, state["incoming_event"])
+        else:
+            action_event = action_events[-1] if action_events else {}
+            decision, usage = await decider.decide_for_action_event(
+                entry, action_event, risk_event, action_events, incoming_events)
     except ServerError as exc:
-        log.warning("IRNS agent: decision LLM call failed: %s", exc)
+        log.warning("IRNS agent: decision call failed: %s", exc)
         return {"error": f"Could not reach the server for a decision: {exc}"}
 
     if not decision:
-        return {"error": "The model did not return a usable decision"}
+        return {"error": "No usable decision was produced"}
     return {"decision": decision, "usage": usage}
 
 

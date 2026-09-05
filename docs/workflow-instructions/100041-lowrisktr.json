@@ -1,0 +1,244 @@
+{
+  "alertCode": "100041",
+  "workflowCode": "LowRiskTr",
+  "name": "Low risk transaction",
+  "channels": [
+    "IVR",
+    "SMS",
+    "EMAIL"
+  ],
+  "steps": [
+    {
+      "id": "IVR1",
+      "on": "ALERT_RECEIVED",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR1",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "SMS1_EMAIL1_BLOCK"
+    },
+    {
+      "id": "SMS1_EMAIL1_BLOCK",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS1",
+          "channel": "SMS",
+          "description": "Transaction alert SMS"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL1",
+          "channel": "EMAIL",
+          "description": "Transaction alert Email"
+        },
+        {
+          "actionType": "IB_BLOCK"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "SMS2_EMAIL2"
+    },
+    {
+      "id": "SMS2_EMAIL2",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS2",
+          "channel": "SMS",
+          "description": "IB blocked SMS"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL2",
+          "channel": "EMAIL",
+          "description": "IB blocked Email"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "IVR2"
+    },
+    {
+      "id": "IVR2",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR2",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR3"
+    },
+    {
+      "id": "IVR3",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR3",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR4"
+    },
+    {
+      "id": "IVR4",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR4",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 300,
+      "next": "IVR5"
+    },
+    {
+      "id": "IVR5",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR5",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 300,
+      "next": "SMS3_EMAIL3"
+    },
+    {
+      "id": "SMS3_EMAIL3",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS3",
+          "channel": "SMS"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL3",
+          "channel": "EMAIL"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "IVR6"
+    },
+    {
+      "id": "IVR6",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR6",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 300,
+      "next": "IVR7"
+    },
+    {
+      "id": "IVR7",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR7",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 10800,
+      "next": "IVR8"
+    },
+    {
+      "id": "IVR8",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR8",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR9"
+    },
+    {
+      "id": "IVR9",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR9",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR10"
+    },
+    {
+      "id": "IVR10",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR10",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 39600,
+      "next": "IVR11"
+    },
+    {
+      "id": "IVR11",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR11",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR12"
+    },
+    {
+      "id": "IVR12",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR12",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "ESCALATE"
+    },
+    {
+      "id": "ESCALATE",
+      "on": "TIMEOUT",
+      "terminal": true,
+      "actions": [
+        {
+          "actionType": "MOVE_QUEUE",
+          "queue": "IRNS Dispute"
+        }
+      ],
+      "newStatusCode": "ESCALATED_AGENT"
+    }
+  ],
+  "notes": [
+    "Same IVR/SMS cadence as ChEmail (100021), with an Email sent alongside every SMS. Content of the IVR/SMS/Email differs from ChEmail's own."
+  ]
+}

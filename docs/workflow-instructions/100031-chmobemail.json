@@ -1,0 +1,56 @@
+{
+  "alertCode": "100031",
+  "workflowCode": "ChMobEmail",
+  "name": "Change in mobile no & Email id",
+  "channels": [
+    "SMS",
+    "EMAIL",
+    "AGENT"
+  ],
+  "steps": [
+    {
+      "id": "IMMEDIATE_BLOCK",
+      "on": "ALERT_RECEIVED",
+      "terminal": true,
+      "actions": [
+        {
+          "actionType": "IB_BLOCK"
+        },
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS_BLOCK_OLD",
+          "channel": "SMS",
+          "description": "IB blocked SMS to the old mobile number"
+        },
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS_BLOCK_NEW",
+          "channel": "SMS",
+          "description": "IB blocked SMS to the new mobile number"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL_BLOCK_OLD",
+          "channel": "EMAIL",
+          "description": "IB blocked Email to the old email id"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL_BLOCK_NEW",
+          "channel": "EMAIL",
+          "description": "IB blocked Email to the new email id"
+        },
+        {
+          "actionType": "MOVE_QUEUE",
+          "queue": "IRNS_IBBlock",
+          "description": "Transfer the call to a live agent"
+        }
+      ],
+      "newStatusCode": "MANUAL_QUEUE"
+    }
+  ],
+  "notes": [
+    "No wait/review timer in this workflow - everything fires immediately and the case is handed to a live agent.",
+    "If IRNS itself fails to perform the initial block due to EOD/service unavailability, route to COS_IRNS_IBBLOCK_QUEUE for manual handling instead of IRNS_IBBlock, and notify the Alert system."
+  ]
+}

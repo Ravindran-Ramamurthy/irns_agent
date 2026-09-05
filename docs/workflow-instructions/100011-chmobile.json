@@ -1,0 +1,87 @@
+{
+  "alertCode": "100011",
+  "workflowCode": "ChMobile",
+  "name": "Change in mobile no",
+  "channels": [
+    "EMAIL"
+  ],
+  "steps": [
+    {
+      "id": "EMAIL1",
+      "on": "ALERT_RECEIVED",
+      "actions": [
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL1",
+          "channel": "EMAIL",
+          "description": "Transaction alert notification (1st time)"
+        }
+      ],
+      "waitSeconds": 900,
+      "next": "EMAIL2"
+    },
+    {
+      "id": "EMAIL2",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "IB_BLOCK"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL2",
+          "channel": "EMAIL",
+          "description": "IB blocked notification"
+        }
+      ],
+      "waitSeconds": 900,
+      "next": "EMAIL3"
+    },
+    {
+      "id": "EMAIL3",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL3",
+          "channel": "EMAIL",
+          "description": "Transaction alert notification (reminder)"
+        }
+      ],
+      "waitSeconds": 900,
+      "next": "EMAIL4"
+    },
+    {
+      "id": "EMAIL4",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL4",
+          "channel": "EMAIL",
+          "description": "Transaction alert notification (reminder)"
+        }
+      ],
+      "waitSeconds": 900,
+      "next": "ESCALATE",
+      "note": "SRS does not state an explicit wait after EMAIL4 before escalating - 900s (15 min) assumed consistent with the prior steps' pattern"
+    },
+    {
+      "id": "ESCALATE",
+      "on": "TIMEOUT",
+      "terminal": true,
+      "actions": [
+        {
+          "actionType": "MOVE_QUEUE",
+          "queue": "IRNS_SPK_Analyst"
+        },
+        {
+          "actionType": "MOVE_QUEUE",
+          "queue": "IRNS_Dispute_Case"
+        }
+      ],
+      "newStatusCode": "ESCALATED_ANALYST",
+      "note": "Source SRS lists both IRNS_SPK_Analyst and IRNS_Dispute_Case as the destination for the same no-response condition - ambiguous, confirm with BA which queue(s) actually apply before this step fires in production"
+    }
+  ]
+}

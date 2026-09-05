@@ -1,0 +1,22 @@
+{
+  "responseCode": "1",
+  "name": "Accept the transaction",
+  "description": "Applies regardless of which alert type/workflow this case belongs to.",
+  "check": "Was the internet banking (IB) access already blocked for this case? (an IB_BLOCK action recorded with no later IB_UNBLOCK in this case's action history)",
+  "ifIbCurrentlyBlocked": {
+    "note": "The IB_UNBLOCK action below should itself carry the confirmation to send, via whichever channel(s) this case has already been using - do not invent a new channel",
+    "actions": [
+      {"actionType": "IB_UNBLOCK"}
+    ],
+    "newStatusCode": "CLOSED_ACCEPTED",
+    "terminal": true
+  },
+  "ifIbNotBlocked": {
+    "description": "Nothing to unblock - just close the case",
+    "actions": [
+      {"actionType": "CLOSE_CASE"}
+    ],
+    "newStatusCode": "CLOSED_ACCEPTED",
+    "terminal": true
+  }
+}

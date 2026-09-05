@@ -9,10 +9,10 @@ class IrnsState(TypedDict, total=False):
 
     risk_event: Dict[str, Any]                 # for "actionevent", starts as just {"id": ...} until gather_action_event refetches it
     incoming_event: Optional[Dict[str, Any]]   # "incomingevent" lane only
-    action_events: List[Dict[str, Any]]        # "actionevent" lane only - full history
-    incoming_events: List[Dict[str, Any]]      # "actionevent" lane only - full history
+    action_events: List[Dict[str, Any]]        # "actionevent"/"incomingevent" lanes - full history
+    incoming_events: List[Dict[str, Any]]      # "actionevent"/"incomingevent" lanes - full history
 
-    entry: Any                                 # app.store.Entry - not serialized, no checkpointer in this graph
+    entry: Any                                 # app.domain.IngestResult - not serialized, no checkpointer in this graph
 
     decision: Optional[Dict[str, Any]]
     action_event: Optional[Dict[str, Any]]     # created action_event, once record_action runs

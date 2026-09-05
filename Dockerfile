@@ -20,7 +20,6 @@ RUN ${PYTHON} -m pip install --no-cache-dir --upgrade pip && \
     ${PYTHON} -m pip install --no-cache-dir -r /app/requirements.txt
 
 COPY --chown=bksystems:bksystems app/    /app/app/
-COPY --chown=bksystems:bksystems config/ /app/config/
 
 # 8030 - the next agent port after chat_agent's 8010 and ivr_agent's 8020.
 # Published so smartgateway's IrnsAgentClient can reach it; not meant to be

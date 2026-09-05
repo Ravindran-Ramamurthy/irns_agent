@@ -1,0 +1,224 @@
+{
+  "alertCode": "100051",
+  "workflowCode": "NoBlTr",
+  "name": "No block transaction",
+  "channels": [
+    "IVR",
+    "SMS",
+    "EMAIL"
+  ],
+  "steps": [
+    {
+      "id": "IVR1",
+      "on": "ALERT_RECEIVED",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR1",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "SMS1_EMAIL1"
+    },
+    {
+      "id": "SMS1_EMAIL1",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS1",
+          "channel": "SMS",
+          "description": "Transaction alert SMS"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL1",
+          "channel": "EMAIL",
+          "description": "Transaction alert Email"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "IVR2",
+      "note": "No IB block for this alert type, unlike LowRiskTr's equivalent step"
+    },
+    {
+      "id": "IVR2",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR2",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR3"
+    },
+    {
+      "id": "IVR3",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR3",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR4"
+    },
+    {
+      "id": "IVR4",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR4",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 300,
+      "next": "IVR5"
+    },
+    {
+      "id": "IVR5",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR5",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 300,
+      "next": "SMS2_EMAIL2"
+    },
+    {
+      "id": "SMS2_EMAIL2",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_SMS",
+          "actionCode": "SMS2",
+          "channel": "SMS",
+          "description": "Transaction alert reminder SMS"
+        },
+        {
+          "actionType": "SEND_EMAIL",
+          "actionCode": "EMAIL2",
+          "channel": "EMAIL",
+          "description": "Transaction alert reminder Email"
+        }
+      ],
+      "waitSeconds": 0,
+      "next": "IVR6"
+    },
+    {
+      "id": "IVR6",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR6",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 300,
+      "next": "IVR7"
+    },
+    {
+      "id": "IVR7",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR7",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 10800,
+      "next": "IVR8"
+    },
+    {
+      "id": "IVR8",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR8",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR9"
+    },
+    {
+      "id": "IVR9",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR9",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR10"
+    },
+    {
+      "id": "IVR10",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR10",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 39600,
+      "next": "IVR11"
+    },
+    {
+      "id": "IVR11",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR11",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "IVR12"
+    },
+    {
+      "id": "IVR12",
+      "on": "TIMEOUT",
+      "actions": [
+        {
+          "actionType": "SEND_IVR",
+          "actionCode": "IVR12",
+          "channel": "IVR"
+        }
+      ],
+      "waitSeconds": 15,
+      "next": "ESCALATE"
+    },
+    {
+      "id": "ESCALATE",
+      "on": "TIMEOUT",
+      "terminal": true,
+      "actions": [
+        {
+          "actionType": "MOVE_QUEUE",
+          "queue": "IRNS Dispute"
+        }
+      ],
+      "newStatusCode": "ESCALATED_AGENT"
+    }
+  ],
+  "notes": [
+    "Same base cadence as LowRiskTr (100041), minus IB blocking/unblocking entirely - the IB is never blocked for this alert type except on an explicit dispute."
+  ]
+}

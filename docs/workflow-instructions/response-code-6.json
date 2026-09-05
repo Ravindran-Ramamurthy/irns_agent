@@ -1,0 +1,12 @@
+{
+  "responseCode": "6",
+  "name": "Dispute the transaction",
+  "description": "Applies regardless of which alert type/workflow this case belongs to. Always blocks IB (safe even if it was already blocked) - a dispute never leaves internet banking open.",
+  "actions": [
+    {"actionType": "IB_BLOCK"},
+    {"actionType": "MOVE_QUEUE", "queue": "IRNS_Dispute_Case"},
+    {"actionType": "NOTIFY_ALERT_SYSTEM", "comment": "Dispute Case"}
+  ],
+  "newStatusCode": "CLOSED_DISPUTED",
+  "terminal": true
+}

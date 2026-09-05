@@ -5,7 +5,7 @@ import httpx
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 
-from app import graph as graph_module, graph_runner, prompts, settings, store
+from app import graph as graph_module, graph_runner, settings, store
 from app.server_client import ServerClient, ServerError, forwardable
 
 logging.basicConfig(
@@ -22,11 +22,11 @@ _http: httpx.AsyncClient = None  # type: ignore[assignment]
 @app.on_event("startup")
 async def _startup() -> None:
     global _http
-    prompts.load()
     graph_module.build()
     _http = httpx.AsyncClient(timeout=httpx.Timeout(settings.SERVER_TIMEOUT_SECONDS))
-    log.info("irns agent ready. Server at %s, prompts %s (each tenant auto-ingests on first use - "
-              "see /riskevent, /incomingevent, /actionevent, /init)", settings.SERVER_BASE_URL, prompts.fingerprint())
+    log.info("irns agent ready. Server at %s (each event loads ACTION_TYPE/ACTION_STATUS/"
+              "STATUS live, no cache - see /riskevent, /incomingevent, /actionevent)",
+              settings.SERVER_BASE_URL)
 
 
 @app.on_event("shutdown")
@@ -37,7 +37,7 @@ async def _shutdown() -> None:
 
 @app.get("/health")
 async def health() -> Dict[str, object]:
-    return {"status": "UP", "prompts": prompts.fingerprint()}
+    return {"status": "UP"}
 
 
 @app.get("/buildinfo")
@@ -45,58 +45,34 @@ async def buildinfo() -> Dict[str, object]:
     return {"group": settings.GROUP_NAME, "product": settings.PRODUCT_NAME, "brand": settings.BRAND_NAME}
 
 
-def _entry_json(entry: store.Entry) -> Dict[str, Any]:
-    return {
-        "ingested": entry.ingested,
-        "chunkCount": len(entry.chunks),
-        "actionTypeCount": len(entry.masters.get("ACTION_TYPE", {})),
-        "actionStatusCount": len(entry.masters.get("ACTION_STATUS", {})),
-        "statusCount": len(entry.masters.get("STATUS", {})),
-        "ingestedAt": entry.ingested_at.isoformat() if entry.ingested_at else None,
-        "error": entry.error,
-    }
+@app.get("/decider-mode")
+async def decider_mode(x_tenant_id: str = Header(default="")) -> Dict[str, Any]:
+    """This tenant's current decider mode ("llm"|"local") - see
+    app/store.py's get_decider_mode(). Read-only; POST to change it."""
+    return {"mode": store.get_decider_mode(x_tenant_id)}
 
 
-@app.get("/status")
-async def status(x_tenant_id: str = Header(default="")) -> Dict[str, Any]:
-    """Peeks at whatever is already cached for this tenant - never triggers
-    ingestion itself. Powers the UI's status indicator (see
-    IrnsAgentStatusController.status() on the Java side)."""
-    entry = store.status(x_tenant_id)
-    if entry is None:
-        return {"ingested": False, "chunkCount": 0, "ingestedAt": None, "error": None}
-    return _entry_json(entry)
-
-
-@app.post("/init")
-async def init(request: Request, x_tenant_id: str = Header(default="")) -> JSONResponse:
-    """Forces a fresh ingest of this tenant's "IRNS" knowledge domain and
-    master lookup tables - the "re-init if the document has changed" button
-    on the Java side. Uses this request's own forwarded session, same as
-    every other call into this agent - no separate auth for this."""
+@app.post("/decider-mode")
+async def set_decider_mode(request: Request, x_tenant_id: str = Header(default="")) -> JSONResponse:
+    """Sets (or, with no body/mode, toggles) this tenant's decider mode -
+    runtime-mutable, no restart needed, e.g. to demo both llm and local
+    against the same tenant. Takes effect on the very next event - there is
+    no cache to invalidate any more (see app/store.py)."""
     headers = forwardable(request.headers)
     if not _has_credential(headers):
         return _problem(401, "No session")
 
-    client = ServerClient(_http, headers)
-    entry = await store.reload(client, x_tenant_id)
-    return JSONResponse(status_code=200, content=_entry_json(entry))
+    body = await _body(request)
+    mode = body.get("mode")
+    try:
+        if mode:
+            new_mode = store.set_decider_mode(x_tenant_id, mode)
+        else:
+            new_mode = store.toggle_decider_mode(x_tenant_id)
+    except ValueError as exc:
+        return _problem(400, str(exc))
 
-
-@app.post("/resetContext")
-async def reset_context(request: Request, x_tenant_id: str = Header(default="")) -> JSONResponse:
-    """Evicts this tenant's cached IRNS domain (chunks + masters) without
-    re-ingesting - the next call that needs it (any of /riskevent,
-    /incomingevent, /actionevent, or a direct /init) lazily reloads from
-    scratch. Called whenever the tenant's context is reset (e.g. its IRNS
-    domain document changed) so a stale cache doesn't linger until someone
-    happens to click "re-init"."""
-    headers = forwardable(request.headers)
-    if not _has_credential(headers):
-        return _problem(401, "No session")
-
-    store.reset(x_tenant_id)
-    return JSONResponse(status_code=200, content={"reset": True})
+    return JSONResponse(status_code=200, content={"mode": new_mode})
 
 
 @app.post("/riskevent")
@@ -104,8 +80,8 @@ async def risk_event_created(request: Request, x_tenant_id: str = Header(default
     """Called by smartgateway's RiskEventController right after a risk event
     is created (fire-and-forget - the browser's create request has already
     returned by the time this runs). Runs the "riskevent" lane of the graph
-    (see app/graph.py): auto-ingests this tenant's IRNS domain on first use,
-    decides the next action via one LLM call, and records it."""
+    (see app/graph.py): loads this tenant's IRNS master data fresh, decides
+    the next action via one LLM call, and records it."""
     headers = forwardable(request.headers)
     if not _has_credential(headers):
         return _problem(401, "No session")
