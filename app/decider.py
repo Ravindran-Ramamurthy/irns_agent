@@ -84,6 +84,10 @@ def _parse_json(text: Optional[str]) -> Optional[Dict[str, Any]]:
     return obj if isinstance(obj, dict) else None
 
 
+def _first_step(workflow: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    return next((s for s in workflow.get("steps", []) if s.get("on") == "ALERT_RECEIVED"), None)
+
+
 def _decision_from_step(step: Dict[str, Any]) -> Decision:
     actions = step.get("actions") or []
     primary = actions[0] if actions else {}
@@ -140,7 +144,7 @@ class LocalDecider:
         if not workflow:
             return _unmodeled(f"no WORKFLOW_JSON configured for alert code {row['code'] if row else alert_code_id!r}"), None
 
-        first_step = next((s for s in workflow.get("steps", []) if s.get("on") == "ALERT_RECEIVED"), None)
+        first_step = _first_step(workflow)
         if not first_step:
             return _unmodeled("WORKFLOW_JSON has no ALERT_RECEIVED step"), None
 
@@ -171,10 +175,19 @@ class LocalDecider:
         if not workflow:
             return _unmodeled(f"no WORKFLOW_JSON configured for alert code {row['code'] if row else alert_code_id!r}"), None
 
-        steps = {s["id"]: s for s in workflow.get("steps", []) if s.get("id")}
         current_id = _current_step_id(action_events)
-        current = steps.get(current_id) if current_id else None
-        next_id = current.get("next") if current else None
+        if current_id is None:
+            first_step = _first_step(workflow)
+            if not first_step:
+                return _unmodeled("WORKFLOW_JSON has no ALERT_RECEIVED step"), None
+            return _decision_from_step(first_step), None
+
+        steps = {s["id"]: s for s in workflow.get("steps", []) if s.get("id")}
+        current = steps.get(current_id)
+        if not current:
+            return _unmodeled(f"WORKFLOW_JSON has no step {current_id!r} referenced by the latest action event"), None
+
+        next_id = current.get("next")
         if not next_id:
             return _unmodeled(f"step {current_id!r} has no next step defined in WORKFLOW_JSON"), None
 

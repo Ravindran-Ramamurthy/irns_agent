@@ -132,15 +132,39 @@ async def _record_action(state: IrnsState, config: Dict[str, Any]) -> Dict[str, 
     """Always an insert - even a "nothing to do yet" decision is its own
     action_event row (see reasoning.build_action_event_payload), never a
     mutation of the prior one. Also carries reviewAt onto the risk event
-    itself so the scheduler's poll query stays a single-table scan."""
+    itself so the scheduler's poll query stays a single-table scan.
+
+    A step with several simultaneous actions (see decider._decision_from_step)
+    carries the rest as decision["metadata"]["additionalActions"] - this is
+    what actually turns each of those into its own PENDING action_event row,
+    right after the primary one, in the same order they're declared in
+    WORKFLOW_JSON. Only the last row created for the step gets the real
+    reviewAt; the earlier ones happened together in this one decide cycle,
+    not at a separately scheduled review."""
     client = _client(config)
     entry = state["entry"]
     decision = state["decision"]
     risk_event = state["risk_event"]
 
+    extra_actions = (decision.get("metadata") or {}).get("additionalActions") or []
+    step_id = (decision.get("metadata") or {}).get("stepId")
+
     try:
-        payload = reasoning.build_action_event_payload(entry, risk_event["id"], decision)
+        primary_decision = dict(decision, reviewAt=None) if extra_actions else decision
+        payload = reasoning.build_action_event_payload(entry, risk_event["id"], primary_decision)
         created = await client.create_action_event(payload)
+
+        for i, extra in enumerate(extra_actions):
+            extra_decision = {
+                "actionType": extra.get("actionType"),
+                "actionCode": extra.get("actionCode"),
+                "channel": extra.get("channel"),
+                "metadata": {"stepId": step_id} if step_id else {},
+                "comments": decision.get("comments"),
+                "reviewAt": decision.get("reviewAt") if i == len(extra_actions) - 1 else None,
+            }
+            extra_payload = reasoning.build_action_event_payload(entry, risk_event["id"], extra_decision)
+            created = await client.create_action_event(extra_payload)
 
         updated = dict(risk_event)
         updated["reviewAt"] = decision.get("reviewAt")
