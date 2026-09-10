@@ -223,6 +223,8 @@
     font-size: 11px;
     color: var(--muted);
     opacity: 0.8;
+    min-width: 0;
+    overflow-wrap: break-word;
   }
 
   .note {
@@ -253,7 +255,7 @@
 <div class="page">
   <header>
     <div class="eyebrow">app/graph.py <span class="proposal-tag">implemented</span></div>
-    <h1>How a decision moves through irns-agent</h1>
+    <h1>How a decision moves through the Risk Messaging System agent</h1>
     <p class="subhead">
       Three fire-and-forget triggers — a new risk event, a new incoming event, or a previous
       action's review time coming due — all funnel into one shared decision, which ends in
@@ -270,7 +272,7 @@
 
   <figure>
     <div class="diagram-scroll">
-      <svg viewBox="0 0 1300 460" role="img" aria-label="Flow diagram of the IRNS agent graph: three triggers (riskevent, incomingevent, actionevent) each run load_domain then their own gather node, all converging on a shared decide node, which routes via _after_decide to record_action or close_risk_event, both ending at END.">
+      <svg viewBox="0 0 1300 460" role="img" aria-label="Flow diagram of the Risk Messaging System agent graph: three triggers (riskevent, incomingevent, actionevent) each run load_domain then their own gather node, all converging on a shared decide node, which routes via _after_decide to record_action or close_risk_event, both ending at END.">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
@@ -281,17 +283,17 @@
         <circle cx="45" cy="70" r="18" class="term"></circle>
         <text x="45" y="74" class="term-label">POST</text>
         <text x="72" y="66" class="source-label">/riskevent</text>
-        <text x="72" y="80" class="node-sub" text-anchor="start">RiskEventController.create()</text>
+        <text x="72" y="80" class="node-sub" style="text-anchor:start">RiskEventController.create()</text>
 
         <circle cx="45" cy="215" r="18" class="term"></circle>
         <text x="45" y="219" class="term-label">POST</text>
         <text x="72" y="211" class="source-label">/incomingevent</text>
-        <text x="72" y="225" class="node-sub" text-anchor="start">IncomingEventController.create()</text>
+        <text x="72" y="225" class="node-sub" style="text-anchor:start">IncomingEventController.create()</text>
 
         <circle cx="45" cy="360" r="18" class="term"></circle>
         <text x="45" y="364" class="term-label">POST</text>
         <text x="72" y="356" class="source-label">/actionevent</text>
-        <text x="72" y="370" class="node-sub" text-anchor="start">caller/scheduler not yet built</text>
+        <text x="72" y="370" class="node-sub" style="text-anchor:start">caller/scheduler not yet built</text>
 
         <!-- terminals -> load_domain -->
         <path class="edge" d="M63,70 C110,70 110,140 195,150" marker-end="url(#arrow)" style="color:var(--ink)"></path>
@@ -301,8 +303,8 @@
         <!-- load_domain node -->
         <rect x="195" y="160" width="150" height="56" rx="10" class="node-box"></rect>
         <text x="270" y="184" class="node-label">load_domain</text>
-        <text x="270" y="201" class="node-sub">ensure IRNS ingested</text>
-        <text x="270" y="150" class="routing-tag" text-anchor="middle">routes via _after_load_domain</text>
+        <text x="270" y="201" class="node-sub">ensure domain ingested</text>
+        <text x="270" y="138" class="routing-tag" text-anchor="middle">routes via _after_load_domain</text>
 
         <!-- load_domain -> 3 gather nodes (conditional: which lane) -->
         <path class="edge cond" d="M320,160 C350,120 380,90 430,80" marker-end="url(#arrow)" style="color:var(--accent)"></path>
@@ -316,12 +318,11 @@
 
         <rect x="430" y="160" width="170" height="56" rx="10" class="node-box"></rect>
         <text x="515" y="184" class="node-label">gather_incoming_event</text>
-        <text x="515" y="201" class="node-sub">+ incoming event, both in the body</text>
+        <text x="515" y="201" class="node-sub">in body, + GET history</text>
 
         <rect x="430" y="282" width="170" height="56" rx="10" class="node-box"></rect>
         <text x="515" y="306" class="node-label">gather_action_event</text>
         <text x="515" y="323" class="node-sub">fetches full history via GET</text>
-        <text x="515" y="272" class="routing-tag" text-anchor="middle">only lane that round-trips first</text>
 
         <!-- gather -> decide (fixed edges) -->
         <path class="edge" d="M600,80 C660,80 680,140 745,175" marker-end="url(#arrow)" style="color:var(--ink)"></path>
@@ -372,7 +373,7 @@
     <div class="node-grid">
       <div class="node-card">
         <span class="name">load_domain</span>
-        <p>Lazily ingests the tenant's IRNS knowledge domain + the 3 master lookup tables it needs. Runs first, every lane.</p>
+        <p>Lazily ingests the tenant's Risk Messaging System knowledge domain + the 3 master lookup tables it needs. Runs first, every lane.</p>
         <span class="ref">store.ensure_loaded · app/graph.py</span>
       </div>
       <div class="node-card">
@@ -382,18 +383,18 @@
       </div>
       <div class="node-card">
         <span class="name">gather_incoming_event</span>
-        <p>The incoming event plus its parent risk event are already in the <code>/incomingevent</code> POST body — pass-through.</p>
-        <span class="ref">app/graph.py · app/main.py's /incomingevent</span>
+        <p>The incoming event plus its parent risk event are already in the <code>/incomingevent</code> POST body, but it still fetches that risk event's action/incoming-event history via the same GET calls <b>gather_action_event</b> uses — the decision needs to know current state (e.g. is IB currently blocked right now).</p>
+        <span class="ref">app/graph.py · get_action_events/get_incoming_events</span>
       </div>
       <div class="node-card">
         <span class="name">gather_action_event</span>
         <p><code>/actionevent</code> only carries a risk event id — this node fetches the risk event, every action_event, and every incoming_event for it via the existing GET endpoints before deciding.</p>
-        <span class="ref">app/server_client.py: get_risk_event/get_action_events/get_incoming_events</span>
+        <span class="ref">server_client.py: get_risk_event/get_action_events/get_incoming_events</span>
       </div>
       <div class="node-card decision">
         <span class="name">decide</span>
         <p>One LLM call, one prompt schema, regardless of lane: given the reference material and whatever context was gathered, return <code>{actionType, actionCode, channel, comments, newStatusCode, reviewAt}</code>.</p>
-        <span class="ref">reasoning.decide()</span>
+        <span class="ref">decider.build_decider() → decide_for_* · app/decider.py</span>
       </div>
       <div class="node-card">
         <span class="name">record_action</span>
@@ -416,8 +417,8 @@
   </div>
 
   <div class="note">
-    <b>No pause, no polling loop inside the agent.</b> Unlike ivr_agent's <code>clarify</code>
-    node, nothing in this graph ever calls <code>interrupt()</code> — every run is triggered
+    <b>No pause, no polling loop inside the agent.</b> Unlike ivr_agent's <code>record</code>
+    node (or chat_agent's <code>clarify</code>), nothing in this graph ever calls <code>interrupt()</code> — every run is triggered
     fire-and-forget and runs to completion in one pass. In particular, <b>the agent itself never
     scans for due reviews</b> — it only ever answers <code>/actionevent</code> when something
     else calls it with a risk event id. What that something is — a periodic job, a scheduler,
